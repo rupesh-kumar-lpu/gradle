@@ -125,6 +125,7 @@ class Codecs(
 
         fileCollectionTypes(directoryFileTreeFactory, fileCollectionFactory, artifactSetConverter, fileOperations, fileFactory, patternSetFactory)
 
+        bind(ResourceHandlerCodec(fileOperations))
         bind(ApiTextResourceAdapterCodec)
 
         bind(ClosureCodec)
