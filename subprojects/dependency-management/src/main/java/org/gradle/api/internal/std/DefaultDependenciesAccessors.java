@@ -41,6 +41,7 @@ import org.gradle.internal.classpath.DefaultClassPath;
 import org.gradle.internal.execution.CachingResult;
 import org.gradle.internal.execution.ExecutionEngine;
 import org.gradle.internal.execution.InputChangesContext;
+import org.gradle.internal.execution.Result;
 import org.gradle.internal.execution.UnitOfWork;
 import org.gradle.internal.execution.history.changes.InputChangesInternal;
 import org.gradle.internal.execution.workspace.WorkspaceProvider;
@@ -49,8 +50,8 @@ import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
 import org.gradle.internal.fingerprint.classpath.ClasspathFingerprinter;
 import org.gradle.internal.hash.Hasher;
 import org.gradle.internal.hash.Hashing;
-import org.gradle.internal.management.VersionCatalogBuilderInternal;
 import org.gradle.internal.management.DependencyResolutionManagementInternal;
+import org.gradle.internal.management.VersionCatalogBuilderInternal;
 import org.gradle.internal.service.ServiceRegistry;
 import org.gradle.internal.snapshot.ValueSnapshot;
 import org.gradle.util.IncubationLogger;
@@ -146,13 +147,12 @@ public class DefaultDependenciesAccessors implements DependenciesAccessors {
 
     private void executeWork(UnitOfWork work) {
         CachingResult result = engine.execute(work);
-        result.getExecutionResult().ifSuccessful(er -> {
-            GeneratedAccessors accessors = (GeneratedAccessors) er.getOutput();
-            ClassPath generatedClasses = DefaultClassPath.of(accessors.classesDir);
-            sources = sources.plus(DefaultClassPath.of(accessors.sourcesDir));
-            classes = classes.plus(generatedClasses);
-            classLoaderScope.export(generatedClasses);
-        });
+        Result.ExecutionResult er = result.getExecutionResult().get();
+        GeneratedAccessors accessors = (GeneratedAccessors) er.getOutput();
+        ClassPath generatedClasses = DefaultClassPath.of(accessors.classesDir);
+        sources = sources.plus(DefaultClassPath.of(accessors.sourcesDir));
+        classes = classes.plus(generatedClasses);
+        classLoaderScope.export(generatedClasses);
     }
 
     private static boolean assertCanGenerateAccessors(ProjectRegistry<? extends ProjectDescriptor> projectRegistry) {
