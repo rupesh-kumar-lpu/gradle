@@ -205,6 +205,11 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
             public CachingState getCachingState() {
                 return result.getCachingState();
             }
+
+            @Override
+            public Optional<ImmutableSortedMap<String, CurrentFileCollectionFingerprint>> getInputFileFingerprints() {
+                return work.getInputFileFingerprints();
+            }
         };
     }
 
@@ -214,13 +219,15 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
         private final ExecutionHistoryStore executionHistoryStore;
         private final FileCollectionFingerprinterRegistry fingerprinterRegistry;
         private final ClassLoaderHierarchyHasher classLoaderHierarchyHasher;
+        private ImmutableSortedMap<String, CurrentFileCollectionFingerprint> inputFileFingerprints;
 
         public TaskExecution(
             TaskInternal task,
             TaskExecutionContext context,
             ExecutionHistoryStore executionHistoryStore,
             FileCollectionFingerprinterRegistry fingerprinterRegistry,
-            ClassLoaderHierarchyHasher classLoaderHierarchyHasher) {
+            ClassLoaderHierarchyHasher classLoaderHierarchyHasher
+        ) {
             this.task = task;
             this.context = context;
             this.executionHistoryStore = executionHistoryStore;
@@ -230,12 +237,7 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
 
         @Override
         public Identity identify(Map<String, ValueSnapshot> identityInputs, Map<String, CurrentFileCollectionFingerprint> identityFileInputs) {
-            return new Identity() {
-                @Override
-                public String getUniqueId() {
-                    return task.getPath();
-                }
-            };
+            return task::getPath;
         }
 
         @Override
@@ -421,6 +423,11 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
         }
 
         @Override
+        public void inputFilesFingerprinted(ImmutableSortedMap<String, CurrentFileCollectionFingerprint> fingerprints) {
+            this.inputFileFingerprints = fingerprints;
+        }
+
+        @Override
         public void validate(WorkValidationContext validationContext) {
             Class<?> taskType = GeneratedSubclasses.unpackType(task);
             // TODO This should probably use the task class info store
@@ -439,6 +446,10 @@ public class ExecuteActionsTaskExecuter implements TaskExecuter {
             FileCollection sourceFiles = properties.getSourceFiles();
             boolean hasSourceFiles = properties.hasSourceFiles();
             return emptySourceTaskSkipper.skipIfEmptySources(task, hasSourceFiles, inputFiles, sourceFiles, outputFilesAfterPreviousExecution);
+        }
+
+        public Optional<ImmutableSortedMap<String, CurrentFileCollectionFingerprint>> getInputFileFingerprints() {
+            return Optional.ofNullable(inputFileFingerprints);
         }
 
         @Override

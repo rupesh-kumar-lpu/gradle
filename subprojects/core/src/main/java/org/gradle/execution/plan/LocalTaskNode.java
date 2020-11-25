@@ -16,6 +16,8 @@
 
 package org.gradle.execution.plan;
 
+import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.ImmutableSortedMap;
 import org.gradle.api.Action;
 import org.gradle.api.Task;
 import org.gradle.api.internal.TaskInternal;
@@ -27,6 +29,7 @@ import org.gradle.api.internal.tasks.properties.PropertyWalker;
 import org.gradle.api.internal.tasks.properties.TaskProperties;
 import org.gradle.api.tasks.TaskExecutionException;
 import org.gradle.internal.ImmutableActionSet;
+import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
 import org.gradle.internal.resources.ResourceDeadlockException;
 import org.gradle.internal.resources.ResourceLock;
 import org.gradle.internal.service.ServiceRegistry;
@@ -34,6 +37,8 @@ import org.gradle.internal.service.ServiceRegistry;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -45,6 +50,7 @@ public class LocalTaskNode extends TaskNode {
     private boolean isolated;
     private List<? extends ResourceLock> resourceLocks;
     private TaskProperties taskProperties;
+    private ImmutableMultimap<String, String> inputFileLocations;
 
     public LocalTaskNode(TaskInternal task) {
         this.task = task;
@@ -247,5 +253,17 @@ public class LocalTaskNode extends TaskNode {
         } catch (ResourceDeadlockException e) {
             throw new IllegalStateException(String.format("A deadlock was detected while resolving the %s for task '%s'. This can be caused, for instance, by %s property causing dependency resolution.", description, task, singular), e);
         }
+    }
+
+    public void setInputs(ImmutableSortedMap<String, CurrentFileCollectionFingerprint> inputFileFingerprints) {
+        ImmutableMultimap.Builder<String, String> builder = ImmutableMultimap.builder();
+        for (Map.Entry<String, CurrentFileCollectionFingerprint> entry : inputFileFingerprints.entrySet()) {
+            builder.putAll(entry.getKey(), entry.getValue().getRootPaths());
+        }
+        inputFileLocations = builder.build();
+    }
+
+    public Optional<ImmutableMultimap<String, String>> getInputFileLocations() {
+        return Optional.ofNullable(inputFileLocations);
     }
 }
