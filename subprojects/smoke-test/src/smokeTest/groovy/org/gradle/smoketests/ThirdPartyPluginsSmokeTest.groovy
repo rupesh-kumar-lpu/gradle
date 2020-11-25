@@ -113,7 +113,7 @@ class ThirdPartyPluginsSmokeTest extends AbstractSmokeTest {
         file('build/asciidoc').isDirectory()
 
         expectDeprecationWarnings(result,
-            "Type 'AsciidoctorTask': non-property method 'asGemPath()' should not be annotated with: @Optional, @InputDirectory. " +
+            "Type 'AsciidoctorTask': non-property method 'asGemPath()' should not be annotated with: @InputDirectory, @Optional. " +
                 "This behaviour has been deprecated and is scheduled to be removed in Gradle 7.0. " +
                 "See https://docs.gradle.org/${GradleVersion.current().version}/userguide/more_about_tasks.html#sec:up_to_date_checks for more details.",
             "Property 'logDocuments' has redundant getters: 'getLogDocuments()' and 'isLogDocuments()'. " +
