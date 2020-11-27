@@ -32,8 +32,9 @@ public class DefaultTestDescriptor implements Serializable, InternalJvmTestDescr
     private final String methodName;
     private final Object parentId;
     private String taskPath;
+    private final String buildId;
 
-    public DefaultTestDescriptor(Object id, String name, String displayName, String testKind, String suiteName, String className, String methodName, Object parentId, String taskPath) {
+    public DefaultTestDescriptor(Object id, String name, String displayName, String testKind, String suiteName, String className, String methodName, Object parentId, String taskPath, String buildId) {
         this.id = id;
         this.name = name;
         this.displayName = displayName;
@@ -43,6 +44,7 @@ public class DefaultTestDescriptor implements Serializable, InternalJvmTestDescr
         this.methodName = methodName;
         this.parentId = parentId;
         this.taskPath = taskPath;
+        this.buildId = buildId;
     }
 
     @Override
@@ -78,6 +80,11 @@ public class DefaultTestDescriptor implements Serializable, InternalJvmTestDescr
     @Override
     public String getMethodName() {
         return methodName;
+    }
+
+    @Override
+    public String getBuildId() {
+        return buildId;
     }
 
     @Override

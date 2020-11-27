@@ -32,8 +32,10 @@ import org.gradle.internal.build.event.types.DefaultTestSkippedResult;
 import org.gradle.internal.build.event.types.DefaultTestStartedProgressEvent;
 import org.gradle.internal.build.event.types.DefaultTestSuccessResult;
 import org.gradle.internal.operations.BuildOperationAncestryTracker;
+import org.gradle.internal.operations.BuildOperationCategory;
 import org.gradle.internal.operations.BuildOperationDescriptor;
 import org.gradle.internal.operations.BuildOperationListener;
+import org.gradle.internal.operations.BuildOperationMetadata;
 import org.gradle.internal.operations.OperationFinishEvent;
 import org.gradle.internal.operations.OperationIdentifier;
 import org.gradle.internal.operations.OperationProgressEvent;
@@ -55,6 +57,7 @@ class ClientForwardingTestOperationListener implements BuildOperationListener {
     private final BuildOperationAncestryTracker ancestryTracker;
     private final BuildEventSubscriptions clientSubscriptions;
     private final Map<Object, String> runningTasks = Maps.newConcurrentMap();
+    private final Map<Object, String> includedBuildNames = Maps.newConcurrentMap();
 
     ClientForwardingTestOperationListener(ProgressEventConsumer eventConsumer, BuildOperationAncestryTracker ancestryTracker, BuildEventSubscriptions clientSubscriptions) {
         this.eventConsumer = eventConsumer;
@@ -64,6 +67,20 @@ class ClientForwardingTestOperationListener implements BuildOperationListener {
 
     @Override
     public void started(BuildOperationDescriptor buildOperation, OperationStartEvent startEvent) {
+        BuildOperationMetadata metadata = buildOperation.getMetadata();
+        if (metadata instanceof BuildOperationCategory) {
+            BuildOperationCategory category = (BuildOperationCategory) metadata;
+            if (category == BuildOperationCategory.RUN_WORK) {
+                System.out.println(buildOperation);
+            }
+        }
+
+        if (buildOperation.getParentId() != null && buildOperation.getParentId().getId() == 1 && buildOperation.getDisplayName().startsWith("Run tasks (:")) {
+            String name = buildOperation.getDisplayName();
+            String buildName = name.substring(11, name.length() - 1);
+            includedBuildNames.put(buildOperation.getId(), buildName);
+        }
+
         Object details = buildOperation.getDetails();
         if (details instanceof ExecuteTaskBuildOperationDetails) {
             Task task = ((ExecuteTaskBuildOperationDetails) details).getTask();
@@ -106,7 +123,8 @@ class ClientForwardingTestOperationListener implements BuildOperationListener {
         String methodName = null;
         Object parentId = getParentId(buildOperationId, suite);
         String testTaskPath = getTaskPath(buildOperationId);
-        return new DefaultTestDescriptor(id, name, displayName, testKind, suite.getName(), className, methodName, parentId, testTaskPath);
+        String buildId = getBuildId(buildOperationId);
+        return new DefaultTestDescriptor(id, name, displayName, testKind, suite.getName(), className, methodName, parentId, testTaskPath, buildId);
     }
 
     private DefaultTestDescriptor toTestDescriptorForTest(OperationIdentifier buildOperationId, TestDescriptorInternal test) {
@@ -118,12 +136,18 @@ class ClientForwardingTestOperationListener implements BuildOperationListener {
         String methodName = test.getName();
         Object parentId = getParentId(buildOperationId, test);
         String taskPath = getTaskPath(buildOperationId);
-        return new DefaultTestDescriptor(id, name, displayName, testKind, null, className, methodName, parentId, taskPath);
+        String buildId = getBuildId(buildOperationId);
+        return new DefaultTestDescriptor(id, name, displayName, testKind, null, className, methodName, parentId, taskPath, buildId);
     }
 
     @Nullable
     private String getTaskPath(OperationIdentifier buildOperationId) {
         return ancestryTracker.findClosestExistingAncestor(buildOperationId, runningTasks::get)
+            .orElse(null);
+    }
+
+    private String getBuildId(OperationIdentifier buildOperationId) {
+        return ancestryTracker.findClosestExistingAncestor(buildOperationId, includedBuildNames::get)
             .orElse(null);
     }
 

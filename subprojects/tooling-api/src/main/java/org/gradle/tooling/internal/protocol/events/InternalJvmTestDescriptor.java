@@ -53,4 +53,11 @@ public interface InternalJvmTestDescriptor extends InternalTestDescriptor {
      */
     String getMethodName();
 
+    /**
+     * Returns the name of the included build, if any.
+     *
+     * @return The name of the included build, can be null.
+     * @since 6.8
+     */
+    String getBuildId();
 }

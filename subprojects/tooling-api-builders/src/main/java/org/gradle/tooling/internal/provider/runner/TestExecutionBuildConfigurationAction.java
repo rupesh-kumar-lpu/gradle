@@ -121,32 +121,41 @@ class TestExecutionBuildConfigurationAction implements BuildConfigurationAction 
         final List<String> testTaskPaths = org.gradle.util.CollectionUtils.collect(testDescriptors, new Transformer<String, InternalTestDescriptor>() {
             @Override
             public String transform(InternalTestDescriptor testDescriptor) {
-                return ((DefaultTestDescriptor) testDescriptor).getTaskPath();
+                DefaultTestDescriptor defaultTestDescriptor = (DefaultTestDescriptor) testDescriptor;
+                String buildId = defaultTestDescriptor.getBuildId();
+                if (buildId != null ) {
+                    return buildId + defaultTestDescriptor.getTaskPath();
+                }
+                return defaultTestDescriptor.getTaskPath();
             }
         });
 
-        List<Test> testTasksToRun = new ArrayList<Test>();
+        List<Test> testTasksToRun = new ArrayList<>();
         for (final String testTaskPath : testTaskPaths) {
-            final Task task = gradle.getRootProject().getTasks().findByPath(testTaskPath);
-            if (task == null) {
+            TaskSelection taskSelection = taskSelector.getSelection(testTaskPath);
+            Set<Task> tasks = taskSelection.getTasks();
+            if (tasks.isEmpty()) {
                 throw new TestExecutionException(String.format("Requested test task with path '%s' cannot be found.", testTaskPath));
-            } else if (!(task instanceof Test)) {
-                throw new TestExecutionException(String.format("Task '%s' of type '%s' not supported for executing tests via TestLauncher API.", testTaskPath, task.getClass().getName()));
-            } else {
-                Test testTask = (Test) task;
-                for (InternalTestDescriptor testDescriptor : testDescriptors) {
-                    DefaultTestDescriptor defaultTestDescriptor = (DefaultTestDescriptor) testDescriptor;
-                    if (defaultTestDescriptor.getTaskPath().equals(testTaskPath)) {
-                        String className = defaultTestDescriptor.getClassName();
-                        String methodName = defaultTestDescriptor.getMethodName();
-                        if (className == null && methodName == null) {
-                            testTask.getFilter().includeTestsMatching("*");
-                        } else {
-                            testTask.getFilter().includeTest(className, methodName);
+            }
+            for (Task task : tasks) {
+                if (!(task instanceof Test)) {
+                    throw new TestExecutionException(String.format("Task '%s' of type '%s' not supported for executing tests via TestLauncher API.", testTaskPath, task.getClass().getName()));
+                } else {
+                    Test testTask = (Test) task;
+                    for (InternalTestDescriptor testDescriptor : testDescriptors) {
+                        DefaultTestDescriptor defaultTestDescriptor = (DefaultTestDescriptor) testDescriptor;
+                        if (defaultTestDescriptor.getTaskPath().equals(testTaskPath)) {
+                            String className = defaultTestDescriptor.getClassName();
+                            String methodName = defaultTestDescriptor.getMethodName();
+                            if (className == null && methodName == null) {
+                                testTask.getFilter().includeTestsMatching("*");
+                            } else {
+                                testTask.getFilter().includeTest(className, methodName);
+                            }
                         }
                     }
+                    testTasksToRun.add(testTask);
                 }
-                testTasksToRun.add(testTask);
             }
         }
         return testTasksToRun;
@@ -158,7 +167,7 @@ class TestExecutionBuildConfigurationAction implements BuildConfigurationAction 
             return Collections.emptyList();
         }
 
-        List<Test> tasksToExecute = new ArrayList<Test>();
+        List<Test> tasksToExecute = new ArrayList<>();
 
         final Set<Project> allprojects = gradle.getRootProject().getAllprojects();
         for (Project project : allprojects) {
