@@ -33,7 +33,6 @@ import org.gradle.execution.TaskSelector;
 import org.gradle.internal.build.event.types.DefaultTestDescriptor;
 import org.gradle.process.JavaDebugOptions;
 import org.gradle.process.internal.DefaultJavaDebugOptions;
-import org.gradle.tooling.BuildException;
 import org.gradle.tooling.internal.protocol.events.InternalTestDescriptor;
 import org.gradle.tooling.internal.protocol.test.InternalDebugOptions;
 import org.gradle.tooling.internal.protocol.test.InternalJvmTestRequest;
@@ -125,7 +124,7 @@ class TestExecutionBuildConfigurationAction implements BuildConfigurationAction 
             public String transform(InternalTestDescriptor testDescriptor) {
                 DefaultTestDescriptor defaultTestDescriptor = (DefaultTestDescriptor) testDescriptor;
                 String buildId = defaultTestDescriptor.getBuildId();
-                if (buildId != null ) {
+                if (buildId != null) {
                     return buildId + defaultTestDescriptor.getTaskPath();
                 }
                 return defaultTestDescriptor.getTaskPath();
