@@ -28,10 +28,12 @@ import org.gradle.api.tasks.testing.TestFilter;
 import org.gradle.execution.BuildConfigurationAction;
 import org.gradle.execution.BuildExecutionContext;
 import org.gradle.execution.TaskSelection;
+import org.gradle.execution.TaskSelectionException;
 import org.gradle.execution.TaskSelector;
 import org.gradle.internal.build.event.types.DefaultTestDescriptor;
 import org.gradle.process.JavaDebugOptions;
 import org.gradle.process.internal.DefaultJavaDebugOptions;
+import org.gradle.tooling.BuildException;
 import org.gradle.tooling.internal.protocol.events.InternalTestDescriptor;
 import org.gradle.tooling.internal.protocol.test.InternalDebugOptions;
 import org.gradle.tooling.internal.protocol.test.InternalJvmTestRequest;
@@ -132,8 +134,14 @@ class TestExecutionBuildConfigurationAction implements BuildConfigurationAction 
 
         List<Test> testTasksToRun = new ArrayList<>();
         for (final String testTaskPath : testTaskPaths) {
-            TaskSelection taskSelection = taskSelector.getSelection(testTaskPath);
-            Set<Task> tasks = taskSelection.getTasks();
+            Set<Task> tasks;
+            try {
+                TaskSelection taskSelection = taskSelector.getSelection(testTaskPath);
+                tasks = taskSelection.getTasks();
+            } catch (TaskSelectionException e) {
+                throw new TestExecutionException(String.format("Requested test task with path '%s' cannot be found.", testTaskPath), e);
+            }
+
             if (tasks.isEmpty()) {
                 throw new TestExecutionException(String.format("Requested test task with path '%s' cannot be found.", testTaskPath));
             }

@@ -374,6 +374,7 @@ class CompositeBuildTaskExecutionCrossVersionSpec extends ToolingApiSpecificatio
         outputContains("do something")
     }
 
+    @ToolingApiVersion(">=6.8")
     def "Can launch test from included build via build operation"() {
         setup:
         settingsFile << "includeBuild('other-build')"
