@@ -16,7 +16,7 @@
 
 package org.gradle.execution.plan;
 
-import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import org.gradle.api.Action;
 import org.gradle.api.Task;
@@ -37,7 +37,6 @@ import org.gradle.internal.service.ServiceRegistry;
 import javax.annotation.Nullable;
 import java.io.File;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -50,7 +49,7 @@ public class LocalTaskNode extends TaskNode {
     private boolean isolated;
     private List<? extends ResourceLock> resourceLocks;
     private TaskProperties taskProperties;
-    private ImmutableMultimap<String, String> inputFileLocations;
+    private ImmutableSet<String> inputFileLocations;
 
     public LocalTaskNode(TaskInternal task) {
         this.task = task;
@@ -256,14 +255,14 @@ public class LocalTaskNode extends TaskNode {
     }
 
     public void setInputs(ImmutableSortedMap<String, CurrentFileCollectionFingerprint> inputFileFingerprints) {
-        ImmutableMultimap.Builder<String, String> builder = ImmutableMultimap.builder();
-        for (Map.Entry<String, CurrentFileCollectionFingerprint> entry : inputFileFingerprints.entrySet()) {
-            builder.putAll(entry.getKey(), entry.getValue().getRootPaths());
+        ImmutableSet.Builder<String> builder = ImmutableSet.builder();
+        for (CurrentFileCollectionFingerprint fingerprint : inputFileFingerprints.values()) {
+            builder.addAll(fingerprint.getRootPaths());
         }
         inputFileLocations = builder.build();
     }
 
-    public Optional<ImmutableMultimap<String, String>> getInputFileLocations() {
+    public Optional<ImmutableSet<String>> getInputFileLocations() {
         return Optional.ofNullable(inputFileLocations);
     }
 }
