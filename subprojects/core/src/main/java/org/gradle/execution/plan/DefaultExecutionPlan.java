@@ -505,7 +505,7 @@ public class DefaultExecutionPlan implements ExecutionPlan {
 
     public List<Node> getScheduledNodesPlusDependencies() {
         Set<Node> nodes = nodeMapping.nodes;
-        ImmutableList.Builder<Node> builder = ImmutableList.<Node>builder();
+        ImmutableList.Builder<Node> builder = ImmutableList.builder();
         for (Node node : dependenciesWhichRequireMonitoring) {
             if (!nodes.contains(node)) {
                 builder.add(node);
@@ -794,13 +794,13 @@ public class DefaultExecutionPlan implements ExecutionPlan {
                 runningNodes.remove(node);
                 node.finishExecution(this::recordNodeCompleted);
                 if (node instanceof LocalTaskNode) {
+                    for (String outputPath : node.getMutationInfo().outputPaths) {
+                        consumedDirectories.getNodesRelatedTo(outputPath).stream()
+                            .filter(consumerNode -> missesDependency(node, consumerNode))
+                            .findFirst()
+                            .ifPresent(consumerWithoutDependency -> emitMissingDependencyDeprecationWarning(node, consumerWithoutDependency));
+                    }
                     ((LocalTaskNode) node).getInputFileLocations().ifPresent(consumedLocations -> {
-                        for (String outputPath : node.getMutationInfo().outputPaths) {
-                            consumedDirectories.getNodesRelatedTo(outputPath).stream()
-                                .filter(consumerNode -> missesDependency(node, consumerNode))
-                                .findFirst()
-                                .ifPresent(consumerWithoutDependency -> emitMissingDependencyDeprecationWarning(node, consumerWithoutDependency));
-                        }
                         for (Map.Entry<String, String> entry : consumedLocations.entries()) {
                             producedDirectories.getNodesRelatedTo(entry.getValue()).stream()
                                 .filter(producerNode -> missesDependency(producerNode, node))
