@@ -23,15 +23,6 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
-      with:
-        # We must fetch at least the immediate parents so that if this is
-        # a pull request then we can checkout the head.
-        fetch-depth: 2
-
-    # If this run was triggered by a pull request event, then checkout
-    # the head of the pull request instead of the merge commit.
-    - run: git checkout HEAD^2
-      if: ${{ github.event_name == 'pull_request' }}
 
     # Install and setup JDK 11
     - name: Setup JDK 11
@@ -59,6 +50,9 @@ jobs:
     - name: Compile with Gradle without Build Scan
       if: ${{ matrix.language != 'javascript' && github.repository_owner != 'gradle' }}
       run: ./gradlew --init-script .github/workflows/codeql-analysis.init.gradle -S testClasses
+    
+    - name: Cleanup Gradle Daemons
+      run: ./gradlew --stop
 
     # ℹ️ Command-line programs to run using the OS shell.
     # 📚 https://git.io/JvXDl

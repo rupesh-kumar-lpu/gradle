@@ -129,7 +129,10 @@ import org.gradle.api.internal.project.ProjectStateRegistry;
 import org.gradle.api.internal.properties.GradleProperties;
 import org.gradle.api.internal.resources.ApiTextResourceAdapter;
 import org.gradle.api.internal.runtimeshaded.RuntimeShadedJarFactory;
+import org.gradle.api.internal.std.DefaultDependenciesAccessors;
+import org.gradle.api.internal.std.DependenciesAccessorsWorkspaceProvider;
 import org.gradle.api.model.ObjectFactory;
+import org.gradle.api.provider.ProviderFactory;
 import org.gradle.cache.CacheRepository;
 import org.gradle.cache.internal.CacheScopeMapping;
 import org.gradle.cache.internal.CleaningInMemoryCacheDecoratorFactory;
@@ -138,6 +141,7 @@ import org.gradle.cache.internal.InMemoryCacheDecoratorFactory;
 import org.gradle.cache.internal.ProducerGuard;
 import org.gradle.caching.internal.origin.OriginMetadata;
 import org.gradle.configuration.internal.UserCodeApplicationContext;
+import org.gradle.initialization.DependenciesAccessors;
 import org.gradle.initialization.InternalBuildFinishedListener;
 import org.gradle.initialization.ProjectAccessListener;
 import org.gradle.initialization.layout.BuildLayout;
@@ -151,15 +155,12 @@ import org.gradle.internal.component.external.model.ModuleComponentArtifactMetad
 import org.gradle.internal.component.external.model.PreferJavaRuntimeVariant;
 import org.gradle.internal.component.model.PersistentModuleSource;
 import org.gradle.internal.event.ListenerManager;
-import org.gradle.internal.execution.BeforeExecutionContext;
-import org.gradle.internal.execution.CachingContext;
-import org.gradle.internal.execution.CachingResult;
 import org.gradle.internal.execution.ExecutionEngine;
+import org.gradle.internal.execution.ExecutionResult;
+import org.gradle.internal.execution.InputFingerprinter;
 import org.gradle.internal.execution.OutputChangeListener;
 import org.gradle.internal.execution.OutputSnapshotter;
-import org.gradle.internal.execution.Step;
 import org.gradle.internal.execution.UnitOfWork;
-import org.gradle.internal.execution.UpToDateResult;
 import org.gradle.internal.execution.caching.CachingState;
 import org.gradle.internal.execution.history.AfterPreviousExecutionState;
 import org.gradle.internal.execution.history.BeforeExecutionState;
@@ -168,7 +169,10 @@ import org.gradle.internal.execution.history.OverlappingOutputDetector;
 import org.gradle.internal.execution.history.changes.ExecutionStateChangeDetector;
 import org.gradle.internal.execution.impl.DefaultExecutionEngine;
 import org.gradle.internal.execution.steps.AssignWorkspaceStep;
+import org.gradle.internal.execution.steps.BeforeExecutionContext;
 import org.gradle.internal.execution.steps.BroadcastChangingOutputsStep;
+import org.gradle.internal.execution.steps.CachingContext;
+import org.gradle.internal.execution.steps.CachingResult;
 import org.gradle.internal.execution.steps.CaptureStateAfterExecutionStep;
 import org.gradle.internal.execution.steps.CaptureStateBeforeExecutionStep;
 import org.gradle.internal.execution.steps.CreateOutputsStep;
@@ -180,14 +184,17 @@ import org.gradle.internal.execution.steps.RemovePreviousOutputsStep;
 import org.gradle.internal.execution.steps.ResolveChangesStep;
 import org.gradle.internal.execution.steps.ResolveInputChangesStep;
 import org.gradle.internal.execution.steps.SkipUpToDateStep;
+import org.gradle.internal.execution.steps.Step;
 import org.gradle.internal.execution.steps.StoreExecutionStateStep;
 import org.gradle.internal.execution.steps.TimeoutStep;
+import org.gradle.internal.execution.steps.UpToDateResult;
 import org.gradle.internal.execution.steps.ValidateStep;
 import org.gradle.internal.execution.timeout.TimeoutHandler;
 import org.gradle.internal.file.Deleter;
 import org.gradle.internal.file.FileAccessTimeJournal;
 import org.gradle.internal.file.RelativeFilePathResolver;
 import org.gradle.internal.fingerprint.CurrentFileCollectionFingerprint;
+import org.gradle.internal.fingerprint.classpath.ClasspathFingerprinter;
 import org.gradle.internal.hash.ChecksumService;
 import org.gradle.internal.hash.ClassLoaderHierarchyHasher;
 import org.gradle.internal.hash.FileHasher;
@@ -225,6 +232,7 @@ import org.gradle.internal.snapshot.FileSystemSnapshot;
 import org.gradle.internal.snapshot.ValueSnapshot;
 import org.gradle.internal.snapshot.ValueSnapshotter;
 import org.gradle.internal.typeconversion.NotationParser;
+import org.gradle.internal.vfs.VirtualFileSystem;
 import org.gradle.util.BuildCommencedTimeProvider;
 import org.gradle.util.internal.SimpleMapInterner;
 
@@ -253,14 +261,16 @@ class DependencyManagementBuildScopeServices {
                                                                                     FileResolver fileResolver,
                                                                                     FileCollectionFactory fileCollectionFactory,
                                                                                     DependencyMetaDataProvider dependencyMetaDataProvider,
-                                                                                    ObjectFactory objects) {
+                                                                                    ObjectFactory objects,
+                                                                                    ProviderFactory providers) {
         return instantiator.newInstance(DefaultDependencyResolutionManagement.class,
             context,
             dependencyManagementServices,
             fileResolver,
             fileCollectionFactory,
             dependencyMetaDataProvider,
-            objects
+            objects,
+            providers
         );
     }
 
@@ -733,6 +743,16 @@ class DependencyManagementBuildScopeServices {
         });
     }
 
+    DependenciesAccessors createDependenciesAccessorGenerator(ClassPathRegistry registry,
+                                                              DependenciesAccessorsWorkspaceProvider workspace,
+                                                              DefaultProjectDependencyFactory factory,
+                                                              ExecutionEngine executionEngine,
+                                                              FeaturePreviews featurePreviews,
+                                                              FileCollectionFactory fileCollectionFactory,
+                                                              ClasspathFingerprinter fingerprinter) {
+        return new DefaultDependenciesAccessors(registry, workspace, factory, featurePreviews, executionEngine, fileCollectionFactory, fingerprinter);
+    }
+
 
     /**
      * Execution engine for usage above Gradle scope
@@ -745,24 +765,25 @@ class DependencyManagementBuildScopeServices {
             ClassLoaderHierarchyHasher classLoaderHierarchyHasher,
             Deleter deleter,
             ExecutionStateChangeDetector changeDetector,
+            InputFingerprinter inputFingerprinter,
             ListenerManager listenerManager,
             OutputSnapshotter outputSnapshotter,
             OverlappingOutputDetector overlappingOutputDetector,
             TimeoutHandler timeoutHandler,
             ValidateStep.ValidationWarningReporter validationWarningReporter,
-            ValueSnapshotter valueSnapshotter
+            VirtualFileSystem virtualFileSystem
     ) {
         OutputChangeListener outputChangeListener = listenerManager.getBroadcaster(OutputChangeListener.class);
         // TODO: Figure out how to get rid of origin scope id in snapshot outputs step
         UniqueId fixedUniqueId = UniqueId.from("dhwwyv4tqrd43cbxmdsf24wquu");
         // @formatter:off
         return new DefaultExecutionEngine(
-            new IdentifyStep<>(valueSnapshotter,
+            new IdentifyStep<>(inputFingerprinter,
             new IdentityCacheStep<>(
             new AssignWorkspaceStep<>(
             new LoadExecutionStateStep<>(
-            new ValidateStep<>(validationWarningReporter,
-            new CaptureStateBeforeExecutionStep(buildOperationExecutor, classLoaderHierarchyHasher, outputSnapshotter, overlappingOutputDetector, valueSnapshotter,
+            new ValidateStep<>(virtualFileSystem, validationWarningReporter,
+            new CaptureStateBeforeExecutionStep(buildOperationExecutor, classLoaderHierarchyHasher, inputFingerprinter, outputSnapshotter, overlappingOutputDetector,
             new NoOpCachingStateStep(
             new ResolveChangesStep<>(changeDetector,
             new SkipUpToDateStep<>(
@@ -830,6 +851,11 @@ class DependencyManagementBuildScopeServices {
                 }
 
                 @Override
+                public Optional<ValidationResult> getValidationProblems() {
+                    return context.getValidationProblems();
+                }
+
+                @Override
                 public Optional<BeforeExecutionState> getBeforeExecutionState() {
                     return context.getBeforeExecutionState();
                 }
@@ -862,5 +888,4 @@ class DependencyManagementBuildScopeServices {
             };
         }
     }
-
 }
